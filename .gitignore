@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.spec.bak
+Template/
+*.mp4
+*.mov
+*.mkv
+*.avi
+
