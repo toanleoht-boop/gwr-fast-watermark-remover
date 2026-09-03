@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">GWR workflow preview</title>
+  <desc id="desc">A synthetic before and after preview showing a sparkle watermark removed from a video frame.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#172554"/><stop offset="1" stop-color="#0f766e"/></linearGradient>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#ffffff" stroke-opacity=".12"/></pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+  </defs>
+  <rect width="1200" height="520" rx="24" fill="#0b1020"/>
+  <rect x="24" y="24" width="560" height="472" rx="18" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="616" y="24" width="560" height="472" rx="18" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="24" y="24" width="560" height="472" rx="18" fill="url(#grid)"/>
+  <rect x="616" y="24" width="560" height="472" rx="18" fill="url(#grid)"/>
+  <text x="56" y="72" fill="#bfdbfe" font-family="Segoe UI,Arial" font-size="26" font-weight="700">BEFORE</text>
+  <text x="648" y="72" fill="#a7f3d0" font-family="Segoe UI,Arial" font-size="26" font-weight="700">AFTER</text>
+  <rect x="64" y="110" width="480" height="290" rx="12" fill="#ffffff" fill-opacity=".07" stroke="#ffffff" stroke-opacity=".22"/>
+  <rect x="656" y="110" width="480" height="290" rx="12" fill="#ffffff" fill-opacity=".07" stroke="#ffffff" stroke-opacity=".22"/>
+  <path d="M86 350C180 250 250 300 330 205S465 190 522 135" fill="none" stroke="#fef3c7" stroke-width="10" stroke-linecap="round" opacity=".9"/>
+  <path d="M678 350C772 250 842 300 922 205S1057 190 1114 135" fill="none" stroke="#fef3c7" stroke-width="10" stroke-linecap="round" opacity=".9"/>
+  <g transform="translate(492 348)" fill="#fff" opacity=".95"><path d="M0-38L8-8L38 0L8 8L0 38L-8 8L-38 0L-8-8Z"/><circle r="8"/></g>
+  <g transform="translate(1068 348)" fill="#34d399" opacity=".95"><path d="M0-38L8-8L38 0L8 8L0 38L-8 8L-38 0L-8-8Z"/></g>
+  <text x="64" y="452" fill="#dbeafe" font-family="Segoe UI,Arial" font-size="20">Fixed ROI detected automatically</text>
+  <text x="656" y="452" fill="#d1fae5" font-family="Segoe UI,Arial" font-size="20">Local texture blend · original audio kept</text>
+</svg>

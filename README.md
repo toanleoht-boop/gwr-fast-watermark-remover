@@ -33,6 +33,12 @@ Photos\image.jpg       -> Template\image.jpg
 Videos\clip.mp4        -> Template\clip.mp4
 ```
 
+## Preview
+
+![Synthetic before/after preview](docs/demo.svg)
+
+This preview is synthetic so the repository does not publish anyone's private media. Use permission-cleared media when recording a real workflow GIF for a release.
+
 ## Run from source
 
 ```powershell
