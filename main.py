@@ -1,22 +1,37 @@
-import sys
 import os
 import subprocess
-import qdarktheme
+import sys
+
 import cv2
 import numpy as np
+import qdarktheme
+from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QLabel, QFileDialog, QProgressBar, QMessageBox, QFrame,
-    QSizePolicy, QComboBox, QGroupBox, QDoubleSpinBox, QRadioButton, QButtonGroup,
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem, QSplitter,
-    QDialog, QLineEdit, QFormLayout
+    QApplication,
+    QButtonGroup,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGraphicsPixmapItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QSize, QSizeF, QPointF, QRectF, pyqtSignal, QEvent
-from PyQt6.QtGui import QPixmap, QIcon, QFont, QPainter, QPen, QColor, QBrush, QImage, QMouseEvent
 
-from worker import WatermarkWorker
+from worker import IMAGE_EXTS, MEDIA_EXTS, VIDEO_EXTS, WatermarkWorker
 
-SUPPORTED_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.mp4', '.webm', '.mov', '.avi', '.mkv']
+SUPPORTED_EXTS = sorted(MEDIA_EXTS)
 
 POSITION_PRESETS = {
     "Góc Dưới - Phải (Bottom-Right)": (85.0, 85.0, 12.0, 12.0),
@@ -24,7 +39,7 @@ POSITION_PRESETS = {
     "Góc Trên - Phải (Top-Right)": (85.0, 3.0, 12.0, 12.0),
     "Góc Trên - Trái (Top-Left)": (3.0, 3.0, 12.0, 12.0),
     "Thanh viền dưới (Bottom Bar)": (0.0, 92.0, 100.0, 8.0),
-    "Tùy chỉnh Tọa độ %": None
+    "Tùy chỉnh Tọa độ %": None,
 }
 
 MODERN_STYLE_SHEET = """
@@ -50,22 +65,6 @@ QGroupBox::title {
     subcontrol-position: top left;
     padding: 2px 8px;
     color: #38BDF8;
-}
-QRadioButton {
-    font-size: 13px;
-    color: #F1F5F9;
-    padding: 6px;
-    spacing: 8px;
-}
-QRadioButton::indicator {
-    width: 16px;
-    height: 16px;
-    border-radius: 8px;
-    border: 2px solid #64748B;
-}
-QRadioButton::indicator:checked {
-    border: 2px solid #8B5CF6;
-    background-color: #8B5CF6;
 }
 QPushButton {
     background-color: #1E293B;
@@ -144,12 +143,34 @@ QProgressBar::chunk {
 }
 """
 
-def extract_video_first_frame(video_path):
+
+def frame_to_pixmap(frame):
+    """Convert an OpenCV BGR frame to an owned Qt pixmap."""
+
+    if frame is None:
+        return QPixmap()
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    height, width, channels = frame_rgb.shape
+    image = QImage(
+        frame_rgb.data,
+        width,
+        height,
+        channels * width,
+        QImage.Format.Format_RGB888,
+    )
+    return QPixmap.fromImage(image.copy())
+
+
+def read_video_first_frame(video_path):
+    """Read one frame, copying Unicode paths to a temporary ASCII path."""
+
+    temp_dir = None
     try:
-        temp_dir = None
         target_path = video_path
         if any(ord(c) > 127 for c in video_path):
-            import tempfile, shutil
+            import shutil
+            import tempfile
+
             temp_dir = tempfile.mkdtemp()
             ext = os.path.splitext(video_path)[1] or ".mp4"
             target_path = os.path.join(temp_dir, f"preview_temp{ext}")
@@ -157,22 +178,20 @@ def extract_video_first_frame(video_path):
 
         cap = cv2.VideoCapture(target_path)
         if not cap.isOpened():
-            if temp_dir: shutil.rmtree(temp_dir, ignore_errors=True)
             return None
-            
+
         ret, frame = cap.read()
         cap.release()
-        if temp_dir: shutil.rmtree(temp_dir, ignore_errors=True)
-
-        if ret and frame is not None:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = frame_rgb.shape
-            bytes_per_line = ch * w
-            qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-            return QPixmap.fromImage(qimg.copy())
+        return frame if ret else None
     except Exception as e:
         print("Video preview extraction failed:", e)
-    return None
+        return None
+    finally:
+        if temp_dir:
+            import shutil
+
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 class ZoomableGraphicsView(QGraphicsView):
     roi_selected = pyqtSignal(float, float, float, float)
@@ -196,14 +215,14 @@ class ZoomableGraphicsView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        
+
         self.setStyleSheet("QGraphicsView { border: 2px dashed #334155; border-radius: 14px; background: #0F172A; }")
 
         self.is_drawing = False
         self.is_right_panning = False
         self.last_right_pos = None
         self.start_scene_pos = QPointF()
-        self.current_mode = 'select'
+        self.current_mode = "select"
 
         self.setAcceptDrops(True)
 
@@ -238,13 +257,13 @@ class ZoomableGraphicsView(QGraphicsView):
 
     def set_mode(self, mode):
         self.current_mode = mode
-        if mode == 'pan':
+        if mode == "pan":
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         else:
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
 
     def mousePressEvent(self, event):
-        if self.current_mode == 'select' and event.button() == Qt.MouseButton.LeftButton:
+        if self.current_mode == "select" and event.button() == Qt.MouseButton.LeftButton:
             if not self.pixmap_item.pixmap().isNull():
                 scene_pos = self.mapToScene(event.pos())
                 img_rect = QRectF(self.pixmap_item.pixmap().rect())
@@ -293,7 +312,7 @@ class ZoomableGraphicsView(QGraphicsView):
             self.is_drawing = False
             rect = self.roi_rect_item.rect()
             img_rect = QRectF(self.pixmap_item.pixmap().rect())
-            
+
             if rect.width() > 5 and rect.height() > 5 and not img_rect.isEmpty():
                 pw, ph = img_rect.width(), img_rect.height()
                 x_pct = (rect.x() / pw) * 100.0
@@ -320,103 +339,6 @@ class ZoomableGraphicsView(QGraphicsView):
             if paths:
                 self.window().load_inputs(paths)
 
-class AudioFixDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Khôi Phục Âm Thanh Gốc")
-        self.setMinimumWidth(550)
-        self.setStyleSheet(MODERN_STYLE_SHEET)
-
-        layout = QVBoxLayout(self)
-
-        form_layout = QFormLayout()
-        
-        self.orig_edit = QLineEdit()
-        self.orig_btn = QPushButton("Chọn...")
-        self.orig_btn.clicked.connect(lambda: self.browse_dir(self.orig_edit))
-        row1 = QHBoxLayout()
-        row1.addWidget(self.orig_edit)
-        row1.addWidget(self.orig_btn)
-        form_layout.addRow("1. Thư mục Video Gốc:", row1)
-
-        self.clean_edit = QLineEdit()
-        self.clean_btn = QPushButton("Chọn...")
-        self.clean_btn.clicked.connect(lambda: self.browse_dir(self.clean_edit))
-        row2 = QHBoxLayout()
-        row2.addWidget(self.clean_edit)
-        row2.addWidget(self.clean_btn)
-        form_layout.addRow("2. Thư mục Đã Xóa Logo:", row2)
-
-        self.out_edit = QLineEdit()
-        self.out_btn = QPushButton("Chọn...")
-        self.out_btn.clicked.connect(lambda: self.browse_dir(self.out_edit))
-        row3 = QHBoxLayout()
-        row3.addWidget(self.out_edit)
-        row3.addWidget(self.out_btn)
-        form_layout.addRow("3. Thư mục Output Mới:", row3)
-
-        layout.addLayout(form_layout)
-
-        btn_layout = QHBoxLayout()
-        self.start_btn = QPushButton("BẮT ĐẦU GHÉP TIẾNG")
-        self.start_btn.setObjectName("btn_accent_purple")
-        self.start_btn.clicked.connect(self.accept)
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.start_btn)
-        layout.addLayout(btn_layout)
-
-    def browse_dir(self, line_edit):
-        d = QFileDialog.getExistingDirectory(self, "Chọn Thư Mục")
-        if d:
-            line_edit.setText(d)
-
-class VideoTrimDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Cắt Video Hàng Loạt")
-        self.setMinimumWidth(550)
-        self.setStyleSheet(MODERN_STYLE_SHEET)
-
-        layout = QVBoxLayout(self)
-        form_layout = QFormLayout()
-        
-        self.input_edit = QLineEdit()
-        self.input_btn = QPushButton("Chọn...")
-        self.input_btn.clicked.connect(lambda: self.browse_dir(self.input_edit))
-        row1 = QHBoxLayout()
-        row1.addWidget(self.input_edit)
-        row1.addWidget(self.input_btn)
-        form_layout.addRow("1. Thư mục Video Gốc:", row1)
-
-        self.out_edit = QLineEdit()
-        self.out_btn = QPushButton("Chọn...")
-        self.out_btn.clicked.connect(lambda: self.browse_dir(self.out_edit))
-        row2 = QHBoxLayout()
-        row2.addWidget(self.out_edit)
-        row2.addWidget(self.out_btn)
-        form_layout.addRow("2. Thư mục Output:", row2)
-
-        from PyQt6.QtWidgets import QSpinBox
-        self.duration_spin = QSpinBox()
-        self.duration_spin.setRange(1, 3600)
-        self.duration_spin.setValue(6)
-        self.duration_spin.setSuffix(" giây")
-        form_layout.addRow("3. Độ dài muốn cắt (giây):", self.duration_spin)
-
-        layout.addLayout(form_layout)
-
-        btn_layout = QHBoxLayout()
-        self.start_btn = QPushButton("BẮT ĐẦU CẮT")
-        self.start_btn.setObjectName("btn_accent_purple")
-        self.start_btn.clicked.connect(self.accept)
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.start_btn)
-        layout.addLayout(btn_layout)
-
-    def browse_dir(self, line_edit):
-        d = QFileDialog.getExistingDirectory(self, "Chọn Thư Mục")
-        if d:
-            line_edit.setText(d)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -425,6 +347,9 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1080, 780)
         self.input_paths = []
         self.output_dir = None
+        self.source_root = None
+        self.preview_frame = None
+        self.original_preview_pixmap = QPixmap()
         self.worker = None
 
         self.setAcceptDrops(True)
@@ -446,17 +371,17 @@ class MainWindow(QMainWindow):
 
     def setup_ui(self):
         self.setStyleSheet(MODERN_STYLE_SHEET)
-        
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
+
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(16, 14, 16, 14)
         main_layout.setSpacing(10)
 
         # Header Bar
         header_bar = QHBoxLayout()
-        
+
         brand_label = QLabel("✨ GWR FAST WATERMARK REMOVER")
         brand_font = brand_label.font()
         brand_font.setPointSize(17)
@@ -465,29 +390,19 @@ class MainWindow(QMainWindow):
         brand_label.setStyleSheet("color: #F8FAFC; letter-spacing: 1px;")
 
         badge_sub = QLabel("ẢNH & VIDEO HÀNG LOẠT")
-        badge_sub.setStyleSheet("background: #1E1B4B; color: #A7F3D0; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 11px; border: 1px solid #059669;")
+        badge_sub.setStyleSheet(
+            "background: #1E1B4B; color: #A7F3D0; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 11px; border: 1px solid #059669;"
+        )
 
         header_bar.addWidget(brand_label)
         header_bar.addWidget(badge_sub)
         header_bar.addStretch()
 
-        self.btn_trim_video = QPushButton("✂️ Cắt Video Hàng Loạt")
-        self.btn_trim_video.setObjectName("btn_accent_purple")
-        self.btn_trim_video.clicked.connect(self.run_video_trim_tool)
-
-        self.btn_fix_audio = QPushButton("🎵 Khôi Phục Âm Thanh Gốc")
-        self.btn_fix_audio.setObjectName("btn_accent_purple")
-        self.btn_fix_audio.clicked.connect(self.run_audio_fix_tool)
-
         self.open_out_btn = QPushButton("📂 Thư Mục Kết Quả")
         self.open_out_btn.setObjectName("btn_accent_emerald")
         self.open_out_btn.clicked.connect(self.open_output_dir)
 
-        header_bar.addWidget(self.btn_trim_video)
-        header_bar.addWidget(self.btn_fix_audio)
         header_bar.addWidget(self.open_out_btn)
-        self.btn_trim_video.hide()
-        self.btn_fix_audio.hide()
         main_layout.addLayout(header_bar)
         subtitle = QLabel("Xóa watermark cố định nhanh · Tự nhận diện · Giữ nguyên âm thanh · Xử lý hàng loạt")
         subtitle.setStyleSheet("color:#7C8AA5; font-size:12px; padding:0 2px 8px 2px;")
@@ -503,31 +418,7 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(0, 0, 10, 0)
         left_layout.setSpacing(10)
 
-        # Group 1: Engine Selection
-        engine_box = QGroupBox("Chế độ xử lý")
-        engine_layout = QVBoxLayout(engine_box)
-
-        self.radio_lama = QRadioButton("✨ AI LaMa (Deep Learning - Siêu Nét)")
-        self.radio_opencv = QRadioButton("🚀 Smart Fast (khuyến nghị)")
-        self.radio_gemini = QRadioButton("⚡ Gemini Auto (Google Engine)")
-        self.radio_opencv.setChecked(True)
-
-        self.mode_group = QButtonGroup(self)
-        self.mode_group.addButton(self.radio_lama)
-        self.mode_group.addButton(self.radio_opencv)
-        self.mode_group.addButton(self.radio_gemini)
-        
-        self.radio_lama.toggled.connect(self.on_mode_changed)
-        self.radio_opencv.toggled.connect(self.on_mode_changed)
-
-        engine_layout.addWidget(self.radio_lama)
-        engine_layout.addWidget(self.radio_opencv)
-        engine_layout.addWidget(self.radio_gemini)
-        self.radio_lama.hide()
-        self.radio_gemini.hide()
-        left_layout.addWidget(engine_box)
-
-        # Group 2: Position & Coordinates
+        # Group 1: Position & Coordinates
         self.custom_pos_widget = QGroupBox("Vị trí Logo / Quét chọn ROI")
         pos_layout = QVBoxLayout(self.custom_pos_widget)
 
@@ -574,9 +465,12 @@ class MainWindow(QMainWindow):
         coord_grid2.addWidget(self.spin_h)
         pos_layout.addLayout(coord_grid2)
 
+        for spin in (self.spin_x, self.spin_y, self.spin_w, self.spin_h):
+            spin.valueChanged.connect(self._on_roi_value_changed)
+
         left_layout.addWidget(self.custom_pos_widget)
 
-        # Group 3: Input & Output Location Info
+        # Group 2: Input & Output Location Info
         files_box = QGroupBox("Thông tin Đầu vào / Đầu ra")
         files_layout = QVBoxLayout(files_box)
 
@@ -588,6 +482,12 @@ class MainWindow(QMainWindow):
         self.auto_detect_btn.clicked.connect(self.auto_detect_logo)
         self.auto_detect_btn.setEnabled(False)
         files_layout.addWidget(self.auto_detect_btn)
+
+        self.preview_btn = QPushButton("👁️ Xem trước kết quả")
+        self.preview_btn.setCheckable(True)
+        self.preview_btn.clicked.connect(self.toggle_preview)
+        self.preview_btn.setEnabled(False)
+        files_layout.addWidget(self.preview_btn)
 
         self.output_label = QLabel("Output mặc định: Template")
         self.output_label.setStyleSheet("color: #94A3B8; font-size: 11px;")
@@ -611,7 +511,7 @@ class MainWindow(QMainWindow):
 
         # Canvas Control Toolbar
         view_ctrl_layout = QHBoxLayout()
-        
+
         self.btn_tool_select = QPushButton("📐 Quét Chọn Vùng Xóa")
         self.btn_tool_select.setCheckable(True)
         self.btn_tool_select.setChecked(True)
@@ -622,9 +522,9 @@ class MainWindow(QMainWindow):
         self.tool_group = QButtonGroup(self)
         self.tool_group.addButton(self.btn_tool_select)
         self.tool_group.addButton(self.btn_tool_pan)
-        
-        self.btn_tool_select.clicked.connect(lambda: self.drop_area.set_mode('select'))
-        self.btn_tool_pan.clicked.connect(lambda: self.drop_area.set_mode('pan'))
+
+        self.btn_tool_select.clicked.connect(lambda: self.drop_area.set_mode("select"))
+        self.btn_tool_pan.clicked.connect(lambda: self.drop_area.set_mode("pan"))
 
         self.btn_zoom_in = QPushButton("🔍+")
         self.btn_zoom_out = QPushButton("🔍-")
@@ -650,12 +550,21 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.drop_area, stretch=1)
 
         # Main Action Button & Progress Bar
+        action_layout = QHBoxLayout()
         self.process_btn = QPushButton("🚀 BẮT ĐẦU XÓA WATERMARK HÀNG LOẠT")
         self.process_btn.setObjectName("btn_primary")
         self.process_btn.setMinimumHeight(48)
         self.process_btn.clicked.connect(self.process_files)
         self.process_btn.setEnabled(False)
-        right_layout.addWidget(self.process_btn)
+        action_layout.addWidget(self.process_btn, stretch=1)
+
+        self.cancel_btn = QPushButton("⏹ Dừng")
+        self.cancel_btn.setMinimumHeight(48)
+        self.cancel_btn.clicked.connect(self.cancel_processing)
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.hide()
+        action_layout.addWidget(self.cancel_btn)
+        right_layout.addLayout(action_layout)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
@@ -673,85 +582,6 @@ class MainWindow(QMainWindow):
         # Set Splitter ratio (Left 32%, Right 68%)
         splitter.setSizes([340, 740])
 
-    def run_video_trim_tool(self):
-        dialog = VideoTrimDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            input_dir = dialog.input_edit.text().strip()
-            out_dir = dialog.out_edit.text().strip()
-            duration = dialog.duration_spin.value()
-
-            if not input_dir or not out_dir:
-                QMessageBox.warning(self, "Lỗi", "Vui lòng chọn đầy đủ thư mục Input và Output!")
-                return
-
-            self.process_btn.setEnabled(False)
-            self.select_files_btn.setEnabled(False)
-            self.btn_fix_audio.setEnabled(False)
-            self.btn_trim_video.setEnabled(False)
-            
-            self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(0)
-            self.progress_bar.show()
-
-            self.trim_worker = VideoTrimWorker(input_dir, out_dir, duration)
-            self.trim_worker.progress.connect(self.on_processing_progress)
-            self.trim_worker.finished.connect(self.on_video_trim_finished)
-            self.trim_worker.error.connect(self.on_processing_error)
-            self.trim_worker.start()
-
-    def on_video_trim_finished(self, count):
-        self.reset_ui_state()
-        self.btn_fix_audio.setEnabled(True)
-        self.btn_trim_video.setEnabled(True)
-        self.progress_bar.hide()
-        self.status_label.setText(f"Hoàn tất cắt {count} video!")
-        self.status_label.setStyleSheet("color: #10B981;")
-        QMessageBox.information(self, "Thành công", f"Đã cắt thành công {count} video!")
-
-    def run_audio_fix_tool(self):
-        dialog = AudioFixDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            orig_dir = dialog.orig_edit.text().strip()
-            cleaned_dir = dialog.clean_edit.text().strip()
-            out_dir = dialog.out_edit.text().strip()
-
-            if not orig_dir or not cleaned_dir or not out_dir:
-                QMessageBox.warning(self, "Lỗi", "Vui lòng chọn đầy đủ 3 thư mục!")
-                return
-
-            self.process_btn.setEnabled(False)
-            self.select_files_btn.setEnabled(False)
-            self.btn_fix_audio.setEnabled(False)
-            
-            self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(0)
-            self.progress_bar.show()
-
-            self.audio_worker = AudioFixWorker(orig_dir, cleaned_dir, out_dir)
-            self.audio_worker.progress.connect(self.on_processing_progress)
-            self.audio_worker.finished.connect(self.on_audio_fix_finished)
-            self.audio_worker.error.connect(self.on_processing_error)
-            self.audio_worker.start()
-
-    def on_audio_fix_finished(self, count):
-        self.reset_ui_state()
-        self.btn_fix_audio.setEnabled(True)
-        self.progress_bar.hide()
-        self.status_label.setText(f"Hoàn tất ghép tiếng chuẩn cho {count} video!")
-        self.status_label.setStyleSheet("color: #10B981;")
-        QMessageBox.information(self, "Thành công", f"Đã ghép tiếng nguyên bản AAC chuẩn xác 100% cho {count} video theo đúng tên file!")
-
-    def on_mode_changed(self, checked):
-        if self.radio_gemini.isChecked():
-            self.custom_pos_widget.hide()
-            self.process_btn.setText("⚡ BẮT ĐẦU XÓA WATERMARK (GEMINI)")
-        elif self.radio_lama.isChecked():
-            self.custom_pos_widget.show()
-            self.process_btn.setText("🚀 BẮT ĐẦU XÓA WATERMARK (AI LAMA)")
-        else:
-            self.custom_pos_widget.show()
-            self.process_btn.setText("🚀 BẮT ĐẦU XÓA WATERMARK (OPENCV)")
-
     def on_preset_changed(self, index):
         preset_name = self.preset_combo.currentText()
         coords = POSITION_PRESETS.get(preset_name)
@@ -762,28 +592,32 @@ class MainWindow(QMainWindow):
             self.spin_w.setValue(w)
             self.spin_h.setValue(h)
 
-    def on_interactive_roi_selected(self, x_pct, y_pct, w_pct, h_pct):
-        if not self.radio_lama.isChecked() and not self.radio_opencv.isChecked():
-            self.radio_lama.setChecked(True)
+    def _on_roi_value_changed(self, _value):
+        if self.preview_btn.isChecked() and self.preview_frame is not None:
+            self.toggle_preview(True)
 
+    def on_interactive_roi_selected(self, x_pct, y_pct, w_pct, h_pct):
         self.spin_x.setValue(x_pct)
         self.spin_y.setValue(y_pct)
         self.spin_w.setValue(w_pct)
         self.spin_h.setValue(h_pct)
-        
+
         idx = self.preset_combo.findText("Tùy chỉnh Tọa độ %")
         if idx >= 0:
             self.preset_combo.setCurrentIndex(idx)
-            
-        self.status_label.setText(f"Đã quét chọn vùng AI LaMa xóa: X={x_pct:.1f}%, Y={y_pct:.1f}%, W={w_pct:.1f}%, H={h_pct:.1f}%")
+
+        self.status_label.setText(f"Đã chọn ROI: X={x_pct:.1f}%, Y={y_pct:.1f}%, W={w_pct:.1f}%, H={h_pct:.1f}%")
         self.status_label.setStyleSheet("color: #10B981;")
+        if self.preview_btn.isChecked():
+            self.preview_btn.setChecked(False)
+            self.toggle_preview(False)
 
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Chọn File Ảnh hoặc Video",
             "",
-            "Media Files (*.png *.jpg *.jpeg *.webp *.bmp *.mp4 *.webm *.mov *.avi *.mkv);;All Files (*)"
+            "Media Files (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff *.mp4 *.webm *.mov *.avi *.mkv);;All Files (*)",
         )
         if files:
             self.load_inputs(files)
@@ -794,58 +628,150 @@ class MainWindow(QMainWindow):
             self.output_dir = directory
             self.output_label.setText(f"Output: {directory}")
 
+    def toggle_preview(self, checked):
+        """Show a local before/after preview without writing any file."""
+
+        self.preview_btn.setChecked(bool(checked))
+        if self.preview_frame is None:
+            self.preview_btn.setChecked(False)
+            return
+        if checked:
+            roi_params = (
+                self.spin_x.value(),
+                self.spin_y.value(),
+                self.spin_w.value(),
+                self.spin_h.value(),
+            )
+            roi = WatermarkWorker._roi(self.preview_frame.shape, roi_params)
+            result = WatermarkWorker.smart_remove(self.preview_frame.copy(), *roi)
+            self.drop_area.set_current_pixmap(frame_to_pixmap(result))
+            self._show_roi_overlay(roi, self.preview_frame.shape)
+            self.preview_btn.setText("↩️ Xem ảnh gốc")
+            self.status_label.setText("Đang xem trước kết quả · chưa ghi file")
+            self.status_label.setStyleSheet("color: #38BDF8;")
+        else:
+            self.drop_area.set_current_pixmap(self.original_preview_pixmap)
+            self._show_roi_overlay(
+                WatermarkWorker._roi(self.preview_frame.shape, self._current_roi_params()),
+                self.preview_frame.shape,
+            )
+            self.preview_btn.setText("👁️ Xem trước kết quả")
+            self.status_label.setText("Đã quay lại ảnh gốc · kiểm tra ROI rồi chạy hàng loạt")
+            self.status_label.setStyleSheet("color: #F8FAFC;")
+
+    def _current_roi_params(self):
+        return (
+            self.spin_x.value(),
+            self.spin_y.value(),
+            self.spin_w.value(),
+            self.spin_h.value(),
+        )
+
+    def _show_roi_overlay(self, roi, frame_shape):
+        if self.drop_area.pixmap_item.pixmap().isNull():
+            return
+        x, y, roi_width, roi_height = roi
+        height, width = frame_shape[:2]
+        pixmap = self.drop_area.pixmap_item.pixmap()
+        scale_x, scale_y = pixmap.width() / width, pixmap.height() / height
+        self.drop_area.roi_rect_item.setRect(
+            QRectF(x * scale_x, y * scale_y, roi_width * scale_x, roi_height * scale_y)
+        )
+        self.drop_area.roi_rect_item.show()
+
     def open_output_dir(self):
         target_dir = self.output_dir
         if not target_dir and self.input_paths:
-            target_dir = os.path.dirname(self.input_paths[0])
-            
+            source_dir = os.path.dirname(os.path.abspath(self.input_paths[0]))
+            target_dir = os.path.join(os.path.dirname(source_dir), "Template")
+
         if target_dir and os.path.exists(target_dir):
-            if os.name == 'nt':
+            if os.name == "nt":
                 os.startfile(target_dir)
             else:
-                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', target_dir])
+                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", target_dir])
         else:
             QMessageBox.warning(self, "Cảnh báo", "Chưa có thư mục đầu ra hoặc chưa chọn file!")
 
     def load_inputs(self, paths):
         valid_files = []
-        for p in paths:
-            if os.path.isfile(p):
-                ext = os.path.splitext(p)[1].lower()
-                if ext in SUPPORTED_EXTS:
-                    valid_files.append(p)
-            elif os.path.isdir(p):
-                for root, _, filenames in os.walk(p):
-                    for f in filenames:
-                        ext = os.path.splitext(f)[1].lower()
-                        if ext in SUPPORTED_EXTS:
-                            valid_files.append(os.path.join(root, f))
-                            
-        self.input_paths = valid_files
-        
+        seen = set()
+        selected_dirs = []
+        for raw_path in paths:
+            path = os.path.abspath(raw_path)
+            if os.path.isfile(path):
+                if os.path.splitext(path)[1].lower() in SUPPORTED_EXTS:
+                    normalized = os.path.normcase(path)
+                    if normalized not in seen:
+                        seen.add(normalized)
+                        valid_files.append(path)
+            elif os.path.isdir(path):
+                selected_dirs.append(path)
+                for root, dirnames, filenames in os.walk(path):
+                    # A previous run writes to Template beside the source
+                    # folder. Never feed those generated files back into a
+                    # later batch when the parent folder is dropped.
+                    dirnames[:] = [name for name in dirnames if name.lower() != "template"]
+                    for filename in filenames:
+                        if os.path.splitext(filename)[1].lower() not in SUPPORTED_EXTS:
+                            continue
+                        candidate = os.path.join(root, filename)
+                        normalized = os.path.normcase(os.path.abspath(candidate))
+                        if normalized not in seen:
+                            seen.add(normalized)
+                            valid_files.append(candidate)
+
+        self.input_paths = sorted(valid_files, key=lambda value: value.casefold())
+
         if not self.input_paths:
             self.drop_area.set_current_pixmap(QPixmap())
             self.process_btn.setEnabled(False)
+            self.auto_detect_btn.setEnabled(False)
+            self.preview_btn.setChecked(False)
+            self.preview_btn.setEnabled(False)
+            self.preview_frame = None
+            self.original_preview_pixmap = QPixmap()
             self.status_label.setText("Chưa chọn file nào.")
             return
 
         # Default output is a sibling folder named exactly "Template".
         # Example: ...\Tam Quoc\video.mp4 -> ...\Template\video.mp4.
-        source_dir = os.path.dirname(os.path.abspath(self.input_paths[0]))
+        source_dir = (
+            os.path.abspath(selected_dirs[0])
+            if len(selected_dirs) == 1
+            else os.path.dirname(os.path.abspath(self.input_paths[0]))
+        )
         source_parent = os.path.dirname(source_dir)
         self.output_dir = os.path.join(source_parent, "Template")
         self.output_label.setText(f"Output: {self.output_dir}")
 
+        # Preserve nested folders when a whole directory is selected. For a
+        # list of individual files, use their common parent where possible.
+        if len(selected_dirs) == 1:
+            self.source_root = os.path.abspath(selected_dirs[0])
+        else:
+            try:
+                self.source_root = os.path.commonpath([os.path.dirname(path) for path in self.input_paths])
+            except ValueError:
+                self.source_root = None
+
         first_path = self.input_paths[0]
         ext = os.path.splitext(first_path)[1].lower()
 
-        if ext in ['.png', '.jpg', '.jpeg', '.webp', '.bmp']:
-            pixmap = QPixmap(first_path)
+        self.preview_frame = None
+        if ext in IMAGE_EXTS:
+            self.preview_frame = cv2.imdecode(np.fromfile(first_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+            pixmap = frame_to_pixmap(self.preview_frame)
+            self.original_preview_pixmap = pixmap
             self.drop_area.set_current_pixmap(pixmap)
-            self.status_label.setText(f"Đã nạp {len(self.input_paths)} file. Preview Ảnh: {os.path.basename(first_path)}")
-        elif ext in ['.mp4', '.webm', '.mov', '.avi', '.mkv']:
-            pixmap = extract_video_first_frame(first_path)
-            if pixmap:
+            self.status_label.setText(
+                f"Đã nạp {len(self.input_paths)} file. Preview Ảnh: {os.path.basename(first_path)}"
+            )
+        elif ext in VIDEO_EXTS:
+            self.preview_frame = read_video_first_frame(first_path)
+            pixmap = frame_to_pixmap(self.preview_frame)
+            self.original_preview_pixmap = pixmap
+            if not pixmap.isNull():
                 self.drop_area.set_current_pixmap(pixmap)
                 self.status_label.setText(f"Đã nạp {len(self.input_paths)} file Video.")
             else:
@@ -854,6 +780,9 @@ class MainWindow(QMainWindow):
 
         self.process_btn.setEnabled(True)
         self.auto_detect_btn.setEnabled(True)
+        self.preview_btn.setChecked(False)
+        self.preview_btn.setEnabled(self.preview_frame is not None)
+        self.preview_btn.setText("👁️ Xem trước kết quả")
         self.status_label.setStyleSheet("color: #F8FAFC;")
 
     def auto_detect_logo(self):
@@ -863,9 +792,20 @@ class MainWindow(QMainWindow):
         path = self.input_paths[0]
         ext = os.path.splitext(path)[1].lower()
         frames = []
+        temp_dir = None
         try:
-            if ext in ['.mp4', '.webm', '.mov', '.avi', '.mkv']:
-                cap = cv2.VideoCapture(path)
+            if ext in VIDEO_EXTS:
+                target_path = path
+                if any(ord(char) > 127 for char in path):
+                    import shutil
+                    import tempfile
+
+                    temp_dir = tempfile.mkdtemp(prefix="gwr_detect_")
+                    target_path = os.path.join(temp_dir, "input" + (os.path.splitext(path)[1] or ".mp4"))
+                    shutil.copy2(path, target_path)
+                cap = cv2.VideoCapture(target_path)
+                if not cap.isOpened():
+                    raise ValueError("Không mở được video để nhận diện.")
                 count = max(1, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
                 for pos in np.linspace(0, count - 1, min(12, count), dtype=int):
                     cap.set(cv2.CAP_PROP_POS_FRAMES, int(pos))
@@ -880,20 +820,23 @@ class MainWindow(QMainWindow):
 
             roi = self._detect_fixed_mark(frames)
             if roi is None:
-                QMessageBox.information(self, "Chưa tìm thấy", "Không tìm thấy logo đủ tin cậy. Hãy quét chọn thủ công.")
+                QMessageBox.information(
+                    self, "Chưa tìm thấy", "Không tìm thấy logo đủ tin cậy. Hãy quét chọn thủ công."
+                )
                 return
 
             x, y, rw, rh = roi
             h, w = frames[0].shape[:2]
             self.on_interactive_roi_selected(x * 100 / w, y * 100 / h, rw * 100 / w, rh * 100 / h)
-            pix = self.drop_area.pixmap_item.pixmap()
-            if not pix.isNull():
-                sx, sy = pix.width() / w, pix.height() / h
-                self.drop_area.roi_rect_item.setRect(QRectF(x * sx, y * sy, rw * sx, rh * sy))
-                self.drop_area.roi_rect_item.show()
+            self._show_roi_overlay((x, y, rw, rh), frames[0].shape)
             self.status_label.setText(f"Đã tự tìm logo: X={x}, Y={y}, W={rw}, H={rh}. Hãy kiểm tra khung đỏ.")
         except Exception as exc:
             QMessageBox.warning(self, "Lỗi nhận diện", str(exc))
+        finally:
+            if temp_dir:
+                import shutil
+
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     @staticmethod
     def _detect_fixed_mark(frames):
@@ -901,7 +844,7 @@ class MainWindow(QMainWindow):
             return None
         h, w = frames[0].shape[:2]
         scale = min(1.0, 720.0 / w)
-        sw, sh = int(w * scale), int(h * scale)
+        sw, sh = max(1, int(w * scale)), max(1, int(h * scale))
         votes = np.zeros((sh, sw), np.float32)
         contrast_sum = np.zeros((sh, sw), np.float32)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
@@ -920,8 +863,8 @@ class MainWindow(QMainWindow):
 
         # Watermarks normally occupy a corner; discard the central safe area.
         yy, xx = np.indices((sh, sw))
-        outer_x = (xx < sw * .38) | (xx > sw * .62)
-        outer_y = (yy < sh * .32) | (yy > sh * .68)
+        outer_x = (xx < sw * 0.38) | (xx > sw * 0.62)
+        outer_y = (yy < sh * 0.32) | (yy > sh * 0.68)
         corner_mask = (outer_x & outer_y).astype(np.uint8)
         mask *= corner_mask
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
@@ -930,13 +873,15 @@ class MainWindow(QMainWindow):
         # Gemini-generated media uses a consistent translucent sparkle anchor.
         # Check that anchor first; use a padded proportional ROI so the faint
         # arms of the mark are included even when their contrast is low.
-        gy1, gy2 = int(sh * .82), int(sh * .97)
-        gx1, gx2 = int(sw * .72), int(sw * .96)
+        gy1, gy2 = int(sh * 0.82), int(sh * 0.97)
+        gx1, gx2 = int(sw * 0.72), int(sw * 0.96)
         anchor = avg_contrast[gy1:gy2, gx1:gx2]
         if anchor.size and float(np.percentile(anchor, 96)) > 18:
             return (
-                int(w * .775), int(h * .868),
-                int(w * .130), int(h * .085),
+                int(w * 0.775),
+                int(h * 0.868),
+                int(w * 0.130),
+                int(h * 0.085),
             )
 
         n, _, stats, _ = cv2.connectedComponentsWithStats(mask)
@@ -944,21 +889,21 @@ class MainWindow(QMainWindow):
         best_score = 0.0
         for i in range(1, n):
             x, y, rw, rh, area = stats[i]
-            if area < 35 or area > sw * sh * .035 or rw < 6 or rh < 6:
+            if area < 35 or area > sw * sh * 0.035 or rw < 6 or rh < 6:
                 continue
-            if rw > sw * .28 or rh > sh * .22:
+            if rw > sw * 0.28 or rh > sh * 0.22:
                 continue
-            patch_stability = float(stable[y:y+rh, x:x+rw].mean())
-            patch_contrast = float(avg_contrast[y:y+rh, x:x+rw].mean())
+            patch_stability = float(stable[y : y + rh, x : x + rw].mean())
+            patch_contrast = float(avg_contrast[y : y + rh, x : x + rw].mean())
             cx, cy = x + rw / 2, y + rh / 2
-            dx = abs(cx - sw/2) / (sw/2)
-            dy = abs(cy - sh/2) / (sh/2)
+            dx = abs(cx - sw / 2) / (sw / 2)
+            dy = abs(cy - sh / 2) / (sh / 2)
             # Strongly prefer true corner overlays and coherent marks over tiny
             # stationary highlights in the scene.
             edge_bonus = (1.0 + dx + dy) ** 3
-            if cx > sw * .62 and cy > sh * .65:
+            if cx > sw * 0.62 and cy > sh * 0.65:
                 location_prior = 15.0  # Gemini-style default placement
-            elif cy > sh * .65:
+            elif cy > sh * 0.65:
                 location_prior = 3.0
             else:
                 location_prior = 1.0
@@ -969,9 +914,9 @@ class MainWindow(QMainWindow):
         if best is None:
             return None
         x, y, rw, rh = best
-        pad = max(5, int(max(rw, rh) * .18))
-        x, y = max(0, x-pad), max(0, y-pad)
-        rw, rh = min(sw-x, rw+2*pad), min(sh-y, rh+2*pad)
+        pad = max(5, int(max(rw, rh) * 0.18))
+        x, y = max(0, x - pad), max(0, y - pad)
+        rw, rh = min(sw - x, rw + 2 * pad), min(sh - y, rh + 2 * pad)
         inv = 1.0 / scale
         return tuple(int(round(v * inv)) for v in (x, y, rw, rh))
 
@@ -982,49 +927,69 @@ class MainWindow(QMainWindow):
         self.process_btn.setEnabled(False)
         self.select_files_btn.setEnabled(False)
         self.select_out_btn.setEnabled(False)
+        self.auto_detect_btn.setEnabled(False)
+        self.preview_btn.setEnabled(False)
         self.drop_area.setEnabled(False)
         self.custom_pos_widget.setEnabled(False)
-        
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.show()
+
         self.progress_bar.setRange(0, len(self.input_paths))
         self.progress_bar.setValue(0)
         self.progress_bar.show()
-        
+
         self.status_label.setText("Đang xử lý...")
         self.status_label.setStyleSheet("color: #38BDF8;")
 
-        mode = 'opencv'
-
-        roi_params = (
-            self.spin_x.value(),
-            self.spin_y.value(),
-            self.spin_w.value(),
-            self.spin_h.value()
+        self.worker = WatermarkWorker(
+            self.input_paths,
+            self.output_dir,
+            mode="smart",
+            roi_params=self._current_roi_params(),
+            source_root=self.source_root,
         )
-
-        self.worker = WatermarkWorker(self.input_paths, self.output_dir, mode=mode, roi_params=roi_params)
         self.worker.progress.connect(self.on_processing_progress)
         self.worker.error.connect(self.on_processing_error)
         self.worker.finished.connect(self.on_processing_finished)
         self.worker.start()
+
+    def cancel_processing(self):
+        if self.worker and self.worker.isRunning():
+            self.cancel_btn.setEnabled(False)
+            self.status_label.setText("Đang dừng an toàn…")
+            self.status_label.setStyleSheet("color: #F59E0B;")
+            self.worker.cancel()
 
     def on_processing_progress(self, current, total, filename_status):
         self.progress_bar.setValue(current)
         self.status_label.setText(f"Đang xử lý ({current}/{total}): {filename_status}")
 
     def on_processing_finished(self, succeeded, failed):
+        was_cancelled = bool(self.worker and self.worker.was_cancelled)
         self.reset_ui_state()
-        self.status_label.setText(f"Hoàn tất: {succeeded} thành công · {failed} lỗi")
-        self.status_label.setStyleSheet("color: #10B981;")
+        if was_cancelled:
+            self.status_label.setText(f"Đã dừng: {succeeded} thành công · {failed} lỗi")
+            self.status_label.setStyleSheet("color: #F59E0B;")
+        else:
+            self.status_label.setText(f"Hoàn tất: {succeeded} thành công · {failed} lỗi")
+            self.status_label.setStyleSheet("color: #10B981;")
         self.progress_bar.setValue(succeeded + failed)
 
-        reply = QMessageBox.information(
-            self, 
-            "Hoàn tất Xử lý", 
-            f"Thành công: {succeeded}\nLỗi: {failed}\n\nBạn có muốn mở thư mục kết quả không?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.open_output_dir()
+        if was_cancelled:
+            QMessageBox.information(
+                self,
+                "Đã dừng",
+                f"Thành công: {succeeded}\nLỗi: {failed}\n\nMột số file chưa chạy do bạn đã dừng tác vụ.",
+            )
+        else:
+            reply = QMessageBox.information(
+                self,
+                "Hoàn tất Xử lý",
+                f"Thành công: {succeeded}\nLỗi: {failed}\n\nBạn có muốn mở thư mục kết quả không?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.open_output_dir()
 
     def on_processing_error(self, error_msg):
         print(f"Worker Error: {error_msg}")
@@ -1032,14 +997,16 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Lỗi: {error_msg[:70]}...")
 
     def reset_ui_state(self):
-        self.process_btn.setEnabled(True)
+        self.process_btn.setEnabled(bool(self.input_paths))
         self.select_files_btn.setEnabled(True)
         self.select_out_btn.setEnabled(True)
         self.auto_detect_btn.setEnabled(bool(self.input_paths))
+        self.preview_btn.setEnabled(self.preview_frame is not None)
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.hide()
         self.drop_area.setEnabled(True)
         self.custom_pos_widget.setEnabled(True)
-        self.btn_fix_audio.setEnabled(True)
-        self.btn_trim_video.setEnabled(True)
+
 
 def main():
     app = QApplication(sys.argv)
@@ -1047,6 +1014,7 @@ def main():
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

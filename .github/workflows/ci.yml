@@ -3,23 +3,38 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+          cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Syntax check
         run: python -m compileall -q main.py worker.py
       - name: Tests
-        run: python -m pytest -q
+        run: python -m pytest -q --basetemp=.pytest-tmp
       - name: Lint
         run: ruff check main.py worker.py tests
+      - name: Format check
+        run: ruff format --check main.py worker.py tests
 
   build:
     runs-on: windows-latest
@@ -29,11 +44,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
       - name: Install build dependencies
         run: python -m pip install -r requirements.txt pyinstaller
       - name: Package
-        run: python -m PyInstaller --noconfirm GWR-Desktop.spec
+        run: python -m PyInstaller --clean --noconfirm GWR-Desktop.spec
+      - name: Verify packaged executable
+        shell: pwsh
+        run: |
+          $exe = 'dist/GWR-Fast-Watermark-Remover/GWR Fast Watermark Remover.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw "Missing packaged executable: $exe" }
       - uses: actions/upload-artifact@v4
         with:
           name: GWR-Fast-Watermark-Remover-windows
           path: dist/GWR-Fast-Watermark-Remover
+          if-no-files-found: error
+          retention-days: 14

@@ -1,5 +1,5 @@
-PyQt6>=6.4.0
-pyqtdarktheme>=2.1.0
-opencv-python>=4.7.0
-numpy>=1.24.0
-imageio-ffmpeg>=0.5.0
+PyQt6>=6.4.0,<7
+PyQtDarkTheme>=0.1.7,<0.2
+opencv-python>=4.7.0,<6
+numpy>=1.24.0,<3
+imageio-ffmpeg>=0.5.0,<1

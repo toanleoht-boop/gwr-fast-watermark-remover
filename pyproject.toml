@@ -1,3 +1,25 @@
+[project]
+name = "gwr-fast-watermark-remover"
+version = "1.0.1"
+description = "Fast local watermark removal for fixed logos in images and videos."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "GWR contributors" }]
+dependencies = [
+    "PyQt6>=6.4.0,<7",
+    "PyQtDarkTheme>=0.1.7,<0.2",
+    "opencv-python>=4.7.0,<6",
+    "numpy>=1.24.0,<3",
+    "imageio-ffmpeg>=0.5.0,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<10",
+    "ruff>=0.6,<1",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
@@ -8,6 +30,5 @@ target-version = "py311"
 exclude = ["build", "dist"]
 
 [tool.ruff.lint]
-# The legacy UI retains hidden compatibility dialogs while the public surface
-# is the fast batch workflow. Keep CI focused on actionable syntax/style issues.
-ignore = ["BLE001", "F401", "F821", "I001", "PLW1510", "RUF046"]
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = ["BLE001"]

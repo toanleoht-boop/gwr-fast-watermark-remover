@@ -2,12 +2,14 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest-tmp/
+.pytest_cache/
 build/
 dist/
 *.spec.bak
 Template/
+*.gwr-partial*
 *.mp4
 *.mov
 *.mkv
 *.avi
-

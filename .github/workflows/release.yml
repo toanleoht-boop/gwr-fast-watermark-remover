@@ -3,6 +3,12 @@ name: Windows release
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to package (for example v1.0.1)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -10,19 +16,34 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
       - name: Install build dependencies
         run: python -m pip install -r requirements.txt pyinstaller
       - name: Build portable application
-        run: python -m PyInstaller --noconfirm GWR-Desktop.spec
+        run: python -m PyInstaller --clean --noconfirm GWR-Desktop.spec
       - name: Create ZIP
         shell: pwsh
         run: Compress-Archive -Path 'dist/GWR-Fast-Watermark-Remover/*' -DestinationPath 'GWR-Fast-Watermark-Remover-windows.zip' -Force
+      - name: Create SHA256 checksum
+        shell: pwsh
+        run: (Get-FileHash -Algorithm SHA256 'GWR-Fast-Watermark-Remover-windows.zip').Hash + '  GWR-Fast-Watermark-Remover-windows.zip' | Set-Content -Encoding ascii SHA256SUMS.txt
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create ${{ github.ref_name }} GWR-Fast-Watermark-Remover-windows.zip --generate-notes --title "GWR Fast Watermark Remover ${{ github.ref_name }}"
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag GWR-Fast-Watermark-Remover-windows.zip SHA256SUMS.txt --clobber
+          } else {
+            gh release create $tag GWR-Fast-Watermark-Remover-windows.zip SHA256SUMS.txt --generate-notes --verify-tag --title "GWR Fast Watermark Remover $tag"
+          }
