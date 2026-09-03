@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# The legacy UI retains hidden compatibility dialogs while the public surface
+# is the fast batch workflow. Keep CI focused on actionable syntax/style issues.
+ignore = ["BLE001", "F401", "F821", "I001", "PLW1510", "RUF046"]
