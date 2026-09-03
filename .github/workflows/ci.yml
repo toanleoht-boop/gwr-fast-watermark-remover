@@ -20,8 +20,8 @@ jobs:
       matrix:
         python-version: ['3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5.1.0
+      - uses: actions/setup-python@v6.3.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -40,8 +40,8 @@ jobs:
     runs-on: windows-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5.1.0
+      - uses: actions/setup-python@v6.3.0
         with:
           python-version: '3.11'
           cache: pip
@@ -54,7 +54,7 @@ jobs:
         run: |
           $exe = 'dist/GWR-Fast-Watermark-Remover/GWR Fast Watermark Remover.exe'
           if (-not (Test-Path -LiteralPath $exe)) { throw "Missing packaged executable: $exe" }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5.0.0
         with:
           name: GWR-Fast-Watermark-Remover-windows
           path: dist/GWR-Fast-Watermark-Remover
