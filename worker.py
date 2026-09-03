@@ -249,7 +249,13 @@ class WatermarkWorker(QThread):
 
     @staticmethod
     def _run_ffmpeg(command):
-        kwargs = {"capture_output": True, "text": True, "check": False}
+        kwargs = {
+            "capture_output": True,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "check": False,
+        }
         if os.name == "nt":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         return subprocess.run(command, **kwargs)
