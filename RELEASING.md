@@ -6,8 +6,8 @@
 3. Create an annotated tag that follows semantic versioning, for example:
 
    ```powershell
-   git tag -a v1.0.1 -m "Release v1.0.1"
-   git push origin v1.0.1
+   git tag -a v1.0.2 -m "Release v1.0.2"
+   git push origin v1.0.2
    ```
 
 4. The `Windows release` workflow builds the portable folder, creates the ZIP,

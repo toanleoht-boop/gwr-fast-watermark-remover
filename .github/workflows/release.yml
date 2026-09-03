@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to package (for example v1.0.1)"
+        description: "Existing tag to package (for example v1.0.2)"
         required: true
         type: string
 
@@ -29,6 +29,13 @@ jobs:
         run: python -m pip install -r requirements.txt pyinstaller
       - name: Build portable application
         run: python -m PyInstaller --clean --noconfirm GWR-Desktop.spec
+      - name: Smoke-test packaged application
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $exe = 'dist/GWR-Fast-Watermark-Remover/GWR Fast Watermark Remover.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged executable failed to start (exit $($process.ExitCode))" }
       - name: Create ZIP
         shell: pwsh
         run: Compress-Archive -Path 'dist/GWR-Fast-Watermark-Remover/*' -DestinationPath 'GWR-Fast-Watermark-Remover-windows.zip' -Force

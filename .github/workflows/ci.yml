@@ -54,6 +54,9 @@ jobs:
         run: |
           $exe = 'dist/GWR-Fast-Watermark-Remover/GWR Fast Watermark Remover.exe'
           if (-not (Test-Path -LiteralPath $exe)) { throw "Missing packaged executable: $exe" }
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged executable failed to start (exit $($process.ExitCode))" }
       - uses: actions/upload-artifact@v5.0.0
         with:
           name: GWR-Fast-Watermark-Remover-windows

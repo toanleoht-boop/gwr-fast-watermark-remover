@@ -6,7 +6,6 @@ retain their own licenses:
 
 - PyQt6 and Qt 6 — LGPL/GPL/commercial licensing; see the Qt license files in
   the installed distribution.
-- PyQtDarkTheme — MIT License.
 - NumPy — BSD 3-Clause License.
 - OpenCV-Python — Apache License 2.0.
 - imageio-ffmpeg and its FFmpeg binary — BSD/MIT wrapper and LGPL/GPL FFmpeg

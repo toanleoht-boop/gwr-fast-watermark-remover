@@ -4,8 +4,7 @@ import sys
 
 import cv2
 import numpy as np
-import qdarktheme
-from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt, pyqtSignal
+from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -1010,9 +1009,10 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    qdarktheme.setup_theme("dark")
     window = MainWindow()
     window.show()
+    if "--smoke-test" in sys.argv:
+        QTimer.singleShot(1500, app.quit)
     sys.exit(app.exec())
 
 

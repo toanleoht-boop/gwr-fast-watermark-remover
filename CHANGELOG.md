@@ -10,8 +10,12 @@
   duplicate inputs are removed, and nested source folders are preserved.
 - Hardened Unicode paths, atomic image writes, video container/audio muxing, and
   cancellation cleanup.
-- Corrected the PyQtDarkTheme dependency range so a clean install works from
-  PyPI and Dependabot updates stay within compatible major versions.
+
+## 1.0.2 - 2026-09-03
+
+- Fixed packaged startup failures caused by mismatched Qt DLL versions.
+- Removed the redundant theme package and isolated the bundled Qt runtime.
+- Added a real packaged-application startup test to CI and releases.
 
 ## 1.0.1
 
