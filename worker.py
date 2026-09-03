@@ -51,7 +51,7 @@ class WatermarkWorker(QThread):
     def _roi(shape, values):
         h, w = shape[:2]
         x, y = max(0, min(int(values[0]*w/100), w-1)), max(0, min(int(values[1]*h/100), h-1))
-        rw, rh = max(2, min(int(values[2]*w/100), w-x)), max(2, min(int(values[3]*h/100), h-y))
+        rw, rh = max(1, min(int(values[2]*w/100), w-x)), max(1, min(int(values[3]*h/100), h-y))
         return x, y, rw, rh
 
     @staticmethod

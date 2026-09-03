@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a reproducible problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach private media or personal information.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 1.0.0 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include input format, ROI/detection mode, and expected vs actual result.
+    validations:
+      required: true
